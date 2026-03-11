@@ -1,13 +1,13 @@
 import streamlit as st
-from openai import OpenAI
+import requests
 from PyPDF2 import PdfReader
 
 st.set_page_config(page_title="AI PDF Research Agent", page_icon="📄")
 
-# قراءة المفتاح من Streamlit Secrets
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
 st.title("AI PDF Research Agent")
+
+# رابط webhook من n8n
+N8N_WEBHOOK_URL = st.secrets["N8N_WEBHOOK_URL"]
 
 # رفع ملف PDF
 uploaded_file = st.file_uploader("Upload PDF", type="pdf")
@@ -40,24 +40,20 @@ if st.button("Analyze"):
             if not pdf_text:
                 st.error("Could not extract text from this PDF.")
             else:
-                prompt = f"""
-You are an AI assistant that analyzes PDF documents.
-Answer based only on the PDF content below.
+                payload = {
+                    "question": question,
+                    "pdf_text": pdf_text
+                }
 
-PDF content:
-{pdf_text}
+                response = requests.post(N8N_WEBHOOK_URL, json=payload, timeout=120)
 
-User question:
-{question}
-"""
+                if response.status_code == 200:
+                    data = response.json()
 
-                response = client.responses.create(
-                    model="gpt-4.1-mini",
-                    input=prompt
-                )
-
-                st.subheader("AI Response")
-                st.write(response.output_text)
+                    st.subheader("AI Response")
+                    st.write(data.get("answer", "No answer returned from n8n."))
+                else:
+                    st.error(f"n8n returned status code {response.status_code}: {response.text}")
 
         except Exception as e:
             st.error(f"Error: {e}")
